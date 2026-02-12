@@ -1,0 +1,8 @@
+# Dependências para CuliTrap - Armadilha Culicoides
+# Nota: picamera2 deve ser instalado via apt (sudo apt install python3-picamera2)
+
+ultralytics>=8.2.0        # YOLOv11/YOLOv26 inferência e treino
+opencv-python-headless    # Processamento de imagem (sem GUI)
+pandas                    # CSV/JSON para logs de deteções
+matplotlib                # Visualização de gráficos
+numpy                     # Cálculos matemáticos (essencial para OpenCV/YOLO)
