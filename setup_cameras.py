@@ -60,18 +60,19 @@ def list_cameras(cmd_tool):
         
         output = result.stdout + result.stderr
         
-        if "Available cameras" in output or "seq" in output.lower():
+        if "Available cameras" in output:
             print("✓ Câmeras encontradas:\n")
             print(output)
             
-            # Conta quantas câmeras aparecem na lista
-            num_cameras = output.count("seq")
-            if num_cameras == 0 and "Available cameras" in output:
-                # Se não encontrou "seq", mas encontrou "Available cameras",
-                # conta linhas com resolução (padrão alternativo)
-                num_cameras = output.count("x") // 3  # Heurística básica
-                if num_cameras == 0:
-                    num_cameras = 1  # Assume pelo menos 1 se chegou aqui
+            # Conta linhas que começam com número seguido de " : " (formato: "0 : imx708")
+            import re
+            camera_lines = re.findall(r'^\s*\d+\s*:\s*\w+', output, re.MULTILINE)
+            num_cameras = len(camera_lines)
+            
+            if num_cameras == 0:
+                # Fallback: se não encontrou o padrão, assume 1 se "Available cameras" apareceu
+                num_cameras = 1
+            
             return num_cameras
         else:
             print("✗ Nenhuma câmera detetada pelo sistema.")
@@ -81,6 +82,7 @@ def list_cameras(cmd_tool):
     except Exception as e:
         print(f"✗ Erro ao listar câmeras: {e}")
         return 0
+
 
 # ============================================================================
 # PASSO 3: Verificar se Picamera2 (Python) funciona
