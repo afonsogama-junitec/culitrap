@@ -3,7 +3,7 @@
 setup_cameras.py - Script de Diagnóstico UNIVERSAL para as câmeras
 ================================================================================
 PROPÓSITO: Diagnóstico rápido das câmeras antes de qualquer desenvolvimento
-VERSÃO: 2.0 (12/02/26) - UNIVERSAL 
+VERSÃO: 2.1 (17/02/26) - Corrigido para API moderna do Picamera2
 
 FUNCIONALIDADE:
 1. Verifica se as ferramentas 'rpicam-apps' (libcamera) estão instaladas.
@@ -66,6 +66,12 @@ def list_cameras(cmd_tool):
             
             # Conta quantas câmeras aparecem na lista
             num_cameras = output.count("seq")
+            if num_cameras == 0 and "Available cameras" in output:
+                # Se não encontrou "seq", mas encontrou "Available cameras",
+                # conta linhas com resolução (padrão alternativo)
+                num_cameras = output.count("x") // 3  # Heurística básica
+                if num_cameras == 0:
+                    num_cameras = 1  # Assume pelo menos 1 se chegou aqui
             return num_cameras
         else:
             print("✗ Nenhuma câmera detetada pelo sistema.")
@@ -88,13 +94,18 @@ def check_picamera2():
         print("✓ Biblioteca Picamera2 instalada.")
         
         try:
-            # Tenta obter info das câmeras via Python
-            p = Picamera2()
-            config = p.generate_configuration(camera=0)
-            picam2.close()
-            # Se não deu erro a gerar configuração, a câmera 0 está viva
+            # Tenta inicializar a câmera 0 com a API moderna
+            picam = Picamera2(0)
+            
+            # Cria uma configuração simples (preview) para testar
+            config = picam.create_preview_configuration()
+            picam.configure(config)
+            
+            # Se chegou aqui sem erro, a câmera está acessível
+            picam.close()
             print(f"✓ Picamera2 consegue aceder à câmera 0.")
             return True
+            
         except Exception as e:
             print(f"⚠ Picamera2 instalada, mas erro ao aceder à câmera: {e}")
             return False
