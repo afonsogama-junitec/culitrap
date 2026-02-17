@@ -83,7 +83,6 @@ def list_cameras(cmd_tool):
         print(f"✗ Erro ao listar câmeras: {e}")
         return 0
 
-
 # ============================================================================
 # PASSO 3: Verificar se Picamera2 (Python) funciona
 # ============================================================================
