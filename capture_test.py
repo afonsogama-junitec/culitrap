@@ -3,11 +3,11 @@
 capture_test.py - Teste de Captura Individual para Raspberry Pi Camera
 ================================================================================
 PROPÓSITO: Captura 1 foto de teste para validar qualidade/foco/iluminação
-VERSÃO: 2.0 (17/02/26) - Adaptado para câmara única com foco manual e zoom
+VERSÃO: 2.0 (17/02/26) - Adaptado para câmera única com foco manual e zoom
 COMPATIBILIDADE: Raspberry Pi Camera V3 (12MP), HQ, Arducam IMX519
 
 FUNCIONALIDADE:
-1. Testa uma câmara (configurável via CAMERA_ID)
+1. Testa uma câmera (configurável via CAMERA_ID)
 2. Suporta foco manual (essencial para evitar focar no background)
 3. Suporta zoom digital (ROI) para ampliar insetos
 4. Aguarda estabilização auto-exposição/white balance
@@ -34,7 +34,7 @@ except ImportError:
 # CONFIGURAÇÃO - EDITAR AQUI
 # ============================================================================
 
-# ID da câmara a testar (normalmente 0 se só tiver uma ligada)
+# ID da câmera a testar (normalmente 0 se só tiver uma ligada)
 CAMERA_ID = 0
 
 # Resolução (para Raspberry Pi Camera V3 - 12MP)
@@ -57,7 +57,7 @@ OUTPUT_DIR = Path("./camera_test_images")
 print("="*60)
 print("TESTE DE CAPTURA - Raspberry Pi Camera")
 print("="*60)
-print(f"Câmara ID: {CAMERA_ID}")
+print(f"Câmera ID: {CAMERA_ID}")
 print(f"Resolução: {RESOLUTION}")
 print(f"Foco Manual: {'Ativado' if USE_MANUAL_FOCUS else 'Desativado'}")
 if USE_MANUAL_FOCUS:
@@ -104,7 +104,7 @@ def test_camera():
         # Cria objeto Picamera2
         picam = Picamera2(CAMERA_ID)
         
-        # Obtém informação da câmara
+        # Obtém informação da câmera
         camera_info = picam.camera_properties
         print(f"  Modelo: {camera_info.get('Model', 'Desconhecido')}")
         

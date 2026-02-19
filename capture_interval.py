@@ -2,11 +2,11 @@
 """
 capture_interval.py - Captura Intervalada para Monitorização CuliTrap
 ================================================================================
-VERSÃO: 2.0 (17/02/26) - Adaptado para câmara única com foco manual e zoom
+VERSÃO: 2.0 (17/02/26) - Adaptado para câmera única com foco manual e zoom
 PROPÓSITO: Captura automática a intervalos regulares para armadilha de insetos
 
 FUNCIONALIDADE:
-- Suporta 1 câmara (configurável)
+- Suporta 1 câmera (configurável)
 - Foco manual (essencial para evitar focar no background)
 - Zoom digital (ROI) para ampliar insetos
 - Intervalo configurável (recomendado: 300-900s para armadilhas)
@@ -33,7 +33,7 @@ except ImportError:
 # CONFIGURAÇÃO - EDITAR AQUI
 # ============================================================================
 
-# ID da câmara (normalmente 0 se só tiver uma)
+# ID da câmera (normalmente 0 se só tiver uma)
 CAMERA_ID = 0
 
 OUTPUT_BASE_DIR = Path("./captured_images")
@@ -61,7 +61,7 @@ running = True
 print("="*60)
 print("CAPTURA INTERVALADA - CuliTrap")
 print("="*60)
-print(f"Câmara ID: {CAMERA_ID}")
+print(f"Câmera ID: {CAMERA_ID}")
 print(f"Intervalo: {INTERVAL_SECONDS}s ({INTERVAL_SECONDS/60:.1f} minutos)")
 print(f"Resolução: {RESOLUTION}")
 print(f"Foco Manual: {'Ativado' if USE_MANUAL_FOCUS else 'Desativado'}")
@@ -78,7 +78,7 @@ print("="*60)
 # SETUP
 # ============================================================================
 
-# Cria pasta para a câmara
+# Cria pasta para a câmera
 cam_dir = OUTPUT_BASE_DIR / f"cam{CAMERA_ID}"
 cam_dir.mkdir(parents=True, exist_ok=True)
 print(f"✓ Pasta criada: {cam_dir}")
@@ -98,15 +98,15 @@ def calculate_roi(zoom_factor):
     return (x, y, width, height)
 
 # ============================================================================
-# INICIALIZAR CÂMARA
+# INICIALIZAR CÂMERA
 # ============================================================================
 
 camera = None
 
 def init_camera():
-    """Inicializa a câmara com todas as configurações"""
+    """Inicializa a câmera com todas as configurações"""
     global camera
-    print("\n[INIT] A inicializar câmara...")
+    print("\n[INIT] A inicializar a câmera...")
     
     try:
         camera = Picamera2(CAMERA_ID)
@@ -118,7 +118,7 @@ def init_camera():
         camera.configure(config)
         camera.start()
         
-        print(f"  ✓ Câmara {CAMERA_ID} iniciada")
+        print(f"  ✓ Câmera {CAMERA_ID} iniciada")
         
         # Aguarda estabilização
         print("  A aguardar estabilização (3s)...")
@@ -171,13 +171,13 @@ def capture_image():
 # ============================================================================
 
 def cleanup():
-    """Para e fecha a câmara"""
-    print("\n\n[CLEANUP] A parar câmara...")
+    """Para e fecha a câmera"""
+    print("\n\n[CLEANUP] A parar câmera...")
     if camera:
         try:
             camera.stop()
             camera.close()
-            print("  ✓ Câmara parada")
+            print("  ✓ Câmera parada")
         except:
             pass
 
