@@ -2,25 +2,34 @@
 """
 capture_interval.py - Captura Intervalada para Monitorização CuliTrap
 ================================================================================
-VERSÃO: 2.0 (17/02/26) - Adaptado para câmara única com foco manual e zoom
+VERSÃO: 3.0 (19/02/26) - Universal: suporta 16MP, 64MP, Pi nativas
 PROPÓSITO: Captura automática a intervalos regulares para armadilha de insetos
 
+
 FUNCIONALIDADE:
-- Suporta 1 câmara (configurável)
+- DETETA AUTOMATICAMENTE o sensor (16MP, 64MP, 12MP, etc.)
 - Foco manual (essencial para evitar focar no background)
 - Zoom digital (ROI) para ampliar insetos
-- Intervalo configurável (recomendado: 300-900s para armadilhas)
+- Intervalo configurável
 - Guarda com timestamp em ./captured_images/cam{id}/
 
-EXECUÇÃO: python3 capture_interval.py
+
+EXECUÇÃO: 
+  python3 capture_interval.py                              # Auto (deteta sensor)
+  python3 capture_interval.py --resolution 64mp            # Força 64MP
+  python3 capture_interval.py --interval 600 --resolution 16mp  # 10min, 16MP
+  
 Pressione Ctrl+C para parar de forma limpa
 """
+
 
 import sys
 import time
 import signal
+import argparse
 from pathlib import Path
 from datetime import datetime
+
 
 try:
     from picamera2 import Picamera2
@@ -29,63 +38,68 @@ except ImportError:
     print("ERRO: Picamera2 não instalado")
     sys.exit(1)
 
+
 # ============================================================================
-# CONFIGURAÇÃO - EDITAR AQUI
+# CONFIGURAÇÃO - RESOLUÇÕES PREDEFINIDAS
 # ============================================================================
 
-# ID da câmara (normalmente 0 se só tiver uma)
-CAMERA_ID = 0
+
+RESOLUTIONS = {
+    'auto': None,  # Deteta automaticamente
+    '64mp': (9248, 6944),   # Arducam 64MP full
+    '16mp': (4656, 3496),   # Arducam 16MP full
+    '12mp': (4608, 2592),   # Pi Camera V3
+    '8mp':  (3280, 2464),   # Pi Camera V2
+    '4k':   (3840, 2160),   # 4K UHD
+    'fhd':  (1920, 1080),   # Full HD
+}
+
 
 OUTPUT_BASE_DIR = Path("./captured_images")
 
-# --- INTERVALO ---
-INTERVAL_SECONDS = 300  # 300s = 5 minutos (recomendado para armadilhas)
-# Valores típicos: 300 (5min), 600 (10min), 900 (15min)
-
-# --- RESOLUÇÃO ---
-RESOLUTION = (4608, 2592)  # Full para Pi Camera V3 (12MP)
-# Alternativa para testes rápidos: (1920, 1080)
-
-# --- FOCO MANUAL ---
-USE_MANUAL_FOCUS = True
-LENS_POSITION = 7.5  # Ajustar conforme testado no capture_test.py
-# Valores típicos: 0.0 = infinito, 10.0+ = macro
-
-# --- ZOOM DIGITAL (ROI) ---
-USE_ZOOM = False  # Mudar para True se quiser zoom
-ZOOM_FACTOR = 4.0  # 2.0x, 4.0x, 8.0x
 
 # Controlo interno
 running = True
 
-print("="*60)
-print("CAPTURA INTERVALADA - CuliTrap")
-print("="*60)
-print(f"Câmara ID: {CAMERA_ID}")
-print(f"Intervalo: {INTERVAL_SECONDS}s ({INTERVAL_SECONDS/60:.1f} minutos)")
-print(f"Resolução: {RESOLUTION}")
-print(f"Foco Manual: {'Ativado' if USE_MANUAL_FOCUS else 'Desativado'}")
-if USE_MANUAL_FOCUS:
-    print(f"  Posição: {LENS_POSITION}")
-print(f"Zoom: {'Ativado' if USE_ZOOM else 'Desativado'}")
-if USE_ZOOM:
-    print(f"  Fator: {ZOOM_FACTOR}x")
-print("="*60)
-print("Pressione Ctrl+C para parar")
-print("="*60)
 
 # ============================================================================
-# SETUP
+# DETETA SENSOR E RESOLUÇÃO MÁXIMA
 # ============================================================================
 
-# Cria pasta para a câmara
-cam_dir = OUTPUT_BASE_DIR / f"cam{CAMERA_ID}"
-cam_dir.mkdir(parents=True, exist_ok=True)
-print(f"✓ Pasta criada: {cam_dir}")
+
+def detect_camera_resolution(camera_id):
+    """Deteta o sensor e retorna a melhor resolução"""
+    try:
+        picam = Picamera2(camera_id)
+        camera_props = picam.camera_properties
+        picam.close()
+        
+        model = camera_props.get('Model', '').lower()
+        
+        # Mapeamento sensor -> resolução
+        if 'ov64a40' in model or '64mp' in model:
+            return (9248, 6944), '64MP (OV64A40)'
+        elif 'imx519' in model or '16mp' in model:
+            return (4656, 3496), '16MP (IMX519)'
+        elif 'imx708' in model:
+            return (4608, 2592), '12MP (IMX708 - Pi V3)'
+        elif 'imx477' in model:
+            return (4056, 3040), '12MP (IMX477 - Pi HQ)'
+        elif 'imx219' in model:
+            return (3280, 2464), '8MP (IMX219 - Pi V2)'
+        else:
+            # Fallback: resolução padrão
+            return (4608, 2592), f'Desconhecido ({model})'
+            
+    except Exception as e:
+        print(f"⚠ Erro ao detetar sensor: {e}")
+        return (1920, 1080), 'Fallback (1080p)'
+
 
 # ============================================================================
 # CALCULAR ROI PARA ZOOM
 # ============================================================================
+
 
 def calculate_roi(zoom_factor):
     """Calcula ROI para zoom centralizado"""
@@ -97,48 +111,66 @@ def calculate_roi(zoom_factor):
     y = (1.0 - height) / 2.0
     return (x, y, width, height)
 
+
 # ============================================================================
-# INICIALIZAR CÂMARA
+# INICIALIZAR CÂMERA
 # ============================================================================
+
 
 camera = None
+cam_dir = None
 
-def init_camera():
-    """Inicializa a câmara com todas as configurações"""
-    global camera
-    print("\n[INIT] A inicializar câmara...")
+
+def init_camera(camera_id, resolution_key, use_manual_focus, lens_position, use_zoom, zoom_factor):
+    """Inicializa a câmera com todas as configurações"""
+    global camera, cam_dir
+    print("\n[INIT] A inicializar câmera...")
+    
+    # Determina resolução a usar
+    if resolution_key == 'auto':
+        resolution, sensor_info = detect_camera_resolution(camera_id)
+        print(f"  Auto-detetado: {sensor_info} → {resolution[0]}x{resolution[1]}")
+    else:
+        resolution = RESOLUTIONS[resolution_key]
+        sensor_info = f"Manual ({resolution_key.upper()})"
+        print(f"  Resolução forçada: {resolution[0]}x{resolution[1]}")
+    
+    # Cria pasta para a câmera
+    cam_dir = OUTPUT_BASE_DIR / f"cam{camera_id}"
+    cam_dir.mkdir(parents=True, exist_ok=True)
+    print(f"  ✓ Pasta criada: {cam_dir}")
     
     try:
-        camera = Picamera2(CAMERA_ID)
+        camera = Picamera2(camera_id)
         
-        # Configuração
+        # Configuração (YUV420 para poupar RAM)
         config = camera.create_still_configuration(
-            main={"size": RESOLUTION}
+            main={"size": resolution, "format": "YUV420"}
         )
         camera.configure(config)
         camera.start()
         
-        print(f"  ✓ Câmara {CAMERA_ID} iniciada")
+        print(f"  ✓ Câmera {camera_id} iniciada")
         
         # Aguarda estabilização
         print("  A aguardar estabilização (3s)...")
         time.sleep(3)
         
         # --- APLICAR FOCO MANUAL ---
-        if USE_MANUAL_FOCUS:
+        if use_manual_focus:
             camera.set_controls({
                 "AfMode": controls.AfModeEnum.Manual,
-                "LensPosition": LENS_POSITION
+                "LensPosition": lens_position
             })
-            print(f"  ✓ Foco manual: {LENS_POSITION}")
+            print(f"  ✓ Foco manual: {lens_position}")
             time.sleep(1)
         
         # --- APLICAR ZOOM ---
-        if USE_ZOOM:
-            roi = calculate_roi(ZOOM_FACTOR)
+        if use_zoom:
+            roi = calculate_roi(zoom_factor)
             if roi:
                 camera.set_controls({"ScalerCrop": roi})
-                print(f"  ✓ Zoom {ZOOM_FACTOR}x: ROI = {roi}")
+                print(f"  ✓ Zoom {zoom_factor}x: ROI = {roi}")
         
         return True
         
@@ -146,9 +178,11 @@ def init_camera():
         print(f"  ✗ Erro ao inicializar: {e}")
         return False
 
+
 # ============================================================================
 # CAPTURA
 # ============================================================================
+
 
 def capture_image():
     """Captura e guarda uma imagem"""
@@ -166,38 +200,81 @@ def capture_image():
         print(f"  ✗ Erro ao capturar: {e}")
         return False
 
+
 # ============================================================================
 # CLEANUP
 # ============================================================================
 
+
 def cleanup():
-    """Para e fecha a câmara"""
-    print("\n\n[CLEANUP] A parar câmara...")
+    """Para e fecha a câmera"""
+    print("\n\n[CLEANUP] A parar a câmera...")
     if camera:
         try:
             camera.stop()
             camera.close()
-            print("  ✓ Câmara parada")
+            print("  ✓ Câmera parada")
         except:
             pass
+
 
 def signal_handler(sig, frame):
     """Handler para Ctrl+C"""
     global running
     running = False
 
+
 signal.signal(signal.SIGINT, signal_handler)
+
 
 # ============================================================================
 # MAIN LOOP
 # ============================================================================
 
+
 def main():
     global running
     
+    parser = argparse.ArgumentParser(
+        description="Captura intervalada para CuliTrap (Universal 16MP/64MP)"
+    )
+    parser.add_argument('--camera', type=int, default=0, help='ID da câmera (default: 0)')
+    parser.add_argument('--resolution', choices=list(RESOLUTIONS.keys()), default='auto',
+                        help='Resolução: auto (deteta), 64mp, 16mp, 12mp, 4k, fhd (default: auto)')
+    parser.add_argument('--interval', type=int, default=300,
+                        help='Intervalo entre capturas em segundos (default: 300 = 5min)')
+    parser.add_argument('--manual-focus', action='store_true', help='Ativar foco manual')
+    parser.add_argument('--lens-position', type=float, default=7.5,
+                        help='Posição da lente se foco manual (default: 7.5)')
+    parser.add_argument('--zoom', type=float, default=1.0,
+                        help='Fator de zoom digital (default: 1.0 = sem zoom)')
+    
+    args = parser.parse_args()
+    
+    print("="*60)
+    print("CAPTURA INTERVALADA - CuliTrap (UNIVERSAL)")
+    print("="*60)
+    print(f"Câmera ID: {args.camera}")
+    print(f"Intervalo: {args.interval}s ({args.interval/60:.1f} minutos)")
+    print(f"Resolução: {args.resolution}")
+    print(f"Foco Manual: {'Ativado' if args.manual_focus else 'Desativado'}")
+    if args.manual_focus:
+        print(f"  Posição: {args.lens_position}")
+    print(f"Zoom: {args.zoom}x")
+    print("="*60)
+    print("Pressione Ctrl+C para parar")
+    print("="*60)
+    
     # Inicializa
-    if not init_camera():
-        print("\n✗ Falha ao inicializar. A terminar.")
+    if not init_camera(
+        args.camera,
+        args.resolution,
+        args.manual_focus,
+        args.lens_position,
+        args.zoom > 1.0,
+        args.zoom
+    ):
+        print("\n✗ Falha ao inicializar. A terminar...")
         return 1
     
     print(f"\n{'='*60}")
@@ -213,7 +290,7 @@ def main():
             capture_image()
             
             # Aguarda próximo intervalo
-            time.sleep(INTERVAL_SECONDS)
+            time.sleep(args.interval)
             
     except KeyboardInterrupt:
         pass
@@ -223,6 +300,7 @@ def main():
     print(f"\n✓ Sessão terminada. Total de capturas: {capture_count}")
     print(f"✓ Imagens em: {cam_dir.absolute()}")
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())
