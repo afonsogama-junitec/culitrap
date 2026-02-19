@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Modelos YOLO (pesados)
+*.pt
+*.onnx
+*.engine
+runs/
+
+# Imagens de teste
+test_images/
+*.jpg
+*.png
+*.jpeg
+*.bmp
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Capturas das câmeras
+captures/
+camera_test_images/
+
